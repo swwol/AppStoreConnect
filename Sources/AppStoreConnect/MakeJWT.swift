@@ -45,10 +45,15 @@ public func makeJWT(keyId: String, issuerId: String, key: String) throws -> Stri
     if key.contains("-----BEGIN PRIVATE KEY-----") {
         pemKey = key
     } else {
-        // Raw base64 key content — wrap in PEM headers
+        // Raw base64 key content — wrap in PEM headers with 64-char line breaks
         let cleaned = key.replacingOccurrences(of: " ", with: "")
             .replacingOccurrences(of: "\n", with: "")
-        pemKey = "-----BEGIN PRIVATE KEY-----\n\(cleaned)\n-----END PRIVATE KEY-----"
+        let lines = stride(from: 0, to: cleaned.count, by: 64).map { offset in
+            let start = cleaned.index(cleaned.startIndex, offsetBy: offset)
+            let end = cleaned.index(start, offsetBy: min(64, cleaned.count - offset))
+            return String(cleaned[start..<end])
+        }
+        pemKey = "-----BEGIN PRIVATE KEY-----\n\(lines.joined(separator: "\n"))\n-----END PRIVATE KEY-----"
     }
 
     let privateKey = try P256.Signing.PrivateKey(pemRepresentation: pemKey)
