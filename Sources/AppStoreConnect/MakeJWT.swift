@@ -41,7 +41,17 @@ public func makeJWT(keyId: String, issuerId: String, key: String) throws -> Stri
 
     let signingInput = "\(headerBase64).\(payloadBase64)"
 
-    let privateKey = try P256.Signing.PrivateKey(pemRepresentation: key)
+    let pemKey: String
+    if key.contains("-----BEGIN PRIVATE KEY-----") {
+        pemKey = key
+    } else {
+        // Raw base64 key content — wrap in PEM headers
+        let cleaned = key.replacingOccurrences(of: " ", with: "")
+            .replacingOccurrences(of: "\n", with: "")
+        pemKey = "-----BEGIN PRIVATE KEY-----\n\(cleaned)\n-----END PRIVATE KEY-----"
+    }
+
+    let privateKey = try P256.Signing.PrivateKey(pemRepresentation: pemKey)
     let signature = try privateKey.signature(for: Data(signingInput.utf8))
 
     let signatureBase64 = signature.rawRepresentation.base64URLEncodedString()
