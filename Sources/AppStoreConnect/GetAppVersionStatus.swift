@@ -2,6 +2,7 @@ import Foundation
 
 public enum AppStoreConnectError: Error {
     case noVersionFound
+    case noBuildFound
     case requestFailed(statusCode: Int, body: String)
 }
 
@@ -24,10 +25,11 @@ public enum AppVersionState: String, Sendable, Decodable {
     case waitingForReview = "WAITING_FOR_REVIEW"
 }
 
-/// The state and build number of an App Store version.
+/// The state, build number, and phased release info for an App Store version.
 public struct AppVersionStatus: Sendable {
     public let state: AppVersionState
     public let buildNumber: String?
+    public let phasedRelease: PhasedReleaseStatus?
 }
 
 /// Client for the App Store Connect API.
@@ -52,7 +54,7 @@ public struct API: Sendable {
         components.queryItems = [
             URLQueryItem(name: "limit", value: "1"),
             URLQueryItem(name: "filter[versionString]", value: version),
-            URLQueryItem(name: "include", value: "build"),
+            URLQueryItem(name: "include", value: "build,appStoreVersionPhasedRelease"),
         ]
 
         var request = URLRequest(url: components.url!)
@@ -90,6 +92,24 @@ public struct API: Sendable {
             }
         }
 
-        return AppVersionStatus(state: state, buildNumber: buildNumber)
+        // Resolve phased release from included via the relationship ID
+        let phasedReleaseId = appStoreVersion.relationships?.appStoreVersionPhasedRelease?.data?.id
+        var phasedRelease: PhasedReleaseStatus?
+        if let phasedReleaseId {
+            for item in decoded.included ?? [] {
+                if case .phasedRelease(let pr) = item, pr.id == phasedReleaseId,
+                   let prState = pr.attributes?.phasedReleaseState {
+                    phasedRelease = PhasedReleaseStatus(
+                        state: prState,
+                        currentDayNumber: pr.attributes?.currentDayNumber,
+                        startDate: pr.attributes?.startDate,
+                        totalPauseDuration: pr.attributes?.totalPauseDuration
+                    )
+                    break
+                }
+            }
+        }
+
+        return AppVersionStatus(state: state, buildNumber: buildNumber, phasedRelease: phasedRelease)
     }
 }
